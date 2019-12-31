@@ -1,29 +1,31 @@
 use rand;
-use generic_matrix as matrix;
+use generic_matrix;
 
-use matrix::Matrix;
+use generic_matrix::Matrix;
 use rand::Rng;
 use std::cmp;
 use std::ops::Range;
 use std::fmt::{Debug, Formatter, Error, Write};
+use crate::matrix::{MatrixExt, Cell, CellMut};
 
+mod matrix;
 
-enum Cell {
+enum FieldCell {
     Empty,
     NearMine(usize),
     Mine,
 }
-impl Debug for Cell {
+impl Debug for FieldCell {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         let tmp;
         f.write_str(match &self {
-            Cell::Empty => "_",
-            Cell::NearMine(x) => { tmp = x.to_string(); &tmp },
-            Cell::Mine => "!",
+            FieldCell::Empty => "_",
+            FieldCell::NearMine(x) => { tmp = x.to_string(); &tmp },
+            FieldCell::Mine => "!",
         })
     }
 }
-pub struct Field(Matrix<Cell>);
+pub struct Field(Matrix<FieldCell>);
 impl Field {
     pub fn generate(
         h: usize,
@@ -34,7 +36,7 @@ impl Field {
         rand: &mut impl Rng,
     ) -> Field {
         assert!(mines < w * h);
-        let mut field = Field(Matrix::from_fn(h, w, |_, _| Cell::Empty));
+        let mut field = Field(Matrix::from_fn(h, w, |_, _| FieldCell::Empty));
         let mut mines_set = 0;
         while mines_set < mines {
             if field.set_mine(rand.gen_range(0, h), rand.gen_range(0, w), except_y, except_x) {
@@ -47,38 +49,18 @@ impl Field {
         if self.around_x(x).contains(&except_x) && self.around_y(y).contains(&except_y) {
             return false;
         }
-        if let Cell::Mine = self.0[(y, x)] {
+        if let FieldCell::Mine = self.0[(y, x)] {
             return false;
         }
-        self.0[(y, x)] = Cell::Mine;
-        self.for_each_8_around_mut(y, x, |cell| {
+        self.0[(y, x)] = FieldCell::Mine;
+        self.0.for_each_around_mut(y, x, true, |CellMut { value: cell, x: _, y: _ }| {
             *cell = match *cell {
-                Cell::Empty => Cell::NearMine(1),
-                Cell::NearMine(x) => Cell::NearMine(x + 1),
-                Cell::Mine => Cell::Mine,
+                FieldCell::Empty => FieldCell::NearMine(1),
+                FieldCell::NearMine(x) => FieldCell::NearMine(x + 1),
+                FieldCell::Mine => FieldCell::Mine,
             };
         });
         true
-    }
-    fn for_each_8_around_mut(&mut self, y: usize, x: usize, mut func: impl FnMut(&mut Cell)) {
-        if y != 0 {
-            if x != 0 { func(&mut self.0[(y - 1, x - 1)]); }
-            func(&mut self.0[(y - 1, x)]);
-            if x < self.0.column() - 1 { func(&mut self.0[(y - 1, x + 1)]); }
-        }
-        if x != 0 { func(&mut self.0[(y, x - 1)]); }
-        if x < self.0.column()-1 { func(&mut self.0[(y, x + 1)]); }
-        if y < self.0.row()-1 {
-            if x != 0 { func(&mut self.0[(y + 1, x - 1)]); }
-            func(&mut self.0[(y + 1, x)]);
-            if x < self.0.column()-1 { func(&mut self.0[(y + 1, x + 1)]); }
-        }
-    }
-    fn for_each_4_around(&self, y: usize, x: usize, mut func: impl FnMut(&Cell, usize, usize)) {
-        if y != 0 { func(&self.0[(y - 1, x)], y - 1, x); }
-        if x != 0 { func(&self.0[(y, x - 1)], y, x - 1); }
-        if x < self.0.column()-1 { func(&self.0[(y, x + 1)], y, x + 1); }
-        if y < self.0.row()-1 { func(&self.0[(y + 1, x)], y + 1, x); }
     }
     fn around_y(&self, y: usize) -> Range<usize> {
         y.saturating_sub(1)..cmp::min(self.0.row(), y + 2)
@@ -119,12 +101,12 @@ impl<'a> Session<'a> {
     }
     fn reveal_at(&mut self, y: usize, x: usize) {
         self.presentation[(y, x)] = CellView::Shown;
-        self.field.for_each_4_around(y, x, |cell, y, x| {
-            if let Cell::Mine = *cell {} else {
+        self.field.0.for_each_around(y, x, false, | Cell { value: cell, y, x } | {
+            if let FieldCell::Mine = *cell {} else {
                 // Empty || NearMine which is not shown yet
                 if let CellView::Shown = self.presentation[(y, x)] {} else {
                     self.presentation[(y, x)] = CellView::Shown;
-                    if let Cell::Empty = *cell { // and reveal more
+                    if let FieldCell::Empty = *cell { // and reveal more
                         self.reveal_at(y, x);
                     }
                 }
