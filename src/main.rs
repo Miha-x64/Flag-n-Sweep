@@ -11,6 +11,9 @@ fn main() {
 
     println!();
 
-    let session = Session::from_field(&field, 3, 3);
+    let mut session = Session::from_field(&field, 3, 3);
+    println!("{:?}", session);
+
+    session.auto_flag();
     println!("{:?}", session);
 }

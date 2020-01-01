@@ -12,7 +12,7 @@ mod matrix;
 
 enum FieldCell {
     Empty,
-    NearMine(usize),
+    NearMine(u8),
     Mine,
 }
 impl Debug for FieldCell {
@@ -112,6 +112,38 @@ impl<'a> Session<'a> {
                 }
             }
         })
+    }
+
+    pub fn auto_flag(&mut self) -> usize {
+        let mut flagged: usize = 0;
+        for y in 0..self.presentation.row() {
+            for x in 0..self.presentation.column() {
+                let cell = &self.presentation[(y, x)];
+                if let CellView::Shown = *cell {
+                    if let FieldCell::NearMine(mines) = self.field.0[(y, x)] {
+                        let mut unshown: u8 = 0;
+                        self.presentation.for_each_around(
+                            y, x, true,
+                            | Cell { value: cell, y: _, x: _ } | {
+                                if let CellView::Hidden = cell { unshown += 1; }
+                            }
+                        );
+                        if unshown == mines {
+                            self.presentation.for_each_around_mut(
+                                y, x, true,
+                                | CellMut { value: cell, y: _, x: _} | {
+                                    if let CellView::Hidden = *cell {
+                                        *cell = CellView::Flagged;
+                                        flagged += 1;
+                                    }
+                                }
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        flagged
     }
 }
 impl Debug for Session<'_> {
