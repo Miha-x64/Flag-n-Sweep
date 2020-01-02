@@ -6,10 +6,11 @@ use rand::Rng;
 use std::cmp;
 use std::ops::Range;
 use std::fmt::{Debug, Formatter, Error, Write};
-use crate::matrix::{MatrixExt, Cell, CellMut};
+use crate::matrix::{MatrixExt, Cell, CellMut, MatrixExtPartEq};
 
 mod matrix;
 
+#[derive(PartialEq)]
 enum FieldCell {
     Empty,
     NearMine(u8),
@@ -81,6 +82,7 @@ impl Debug for Field {
     }
 }
 
+#[derive(PartialEq, Clone, Copy)]
 enum CellView {
     Hidden,
     Flagged,
@@ -101,10 +103,10 @@ impl<'a> Session<'a> {
     }
     fn reveal_at(&mut self, y: usize, x: usize) {
         self.presentation[(y, x)] = CellView::Shown;
-        self.field.0.for_each_around(y, x, false, | Cell { value: cell, y, x } | {
-            if let FieldCell::Mine = *cell {} else {
+        self.field.0.for_each_around(y, x, true, | Cell { value: cell, y, x } | {
+            if *cell != FieldCell::Mine {
                 // Empty || NearMine which is not shown yet
-                if let CellView::Shown = self.presentation[(y, x)] {} else {
+                if self.presentation[(y, x)] != CellView::Shown {
                     self.presentation[(y, x)] = CellView::Shown;
                     if let FieldCell::Empty = *cell { // and reveal more
                         self.reveal_at(y, x);
@@ -121,23 +123,16 @@ impl<'a> Session<'a> {
                 let cell = &self.presentation[(y, x)];
                 if let CellView::Shown = *cell {
                     if let FieldCell::NearMine(mines) = self.field.0[(y, x)] {
-                        let mut unshown: u8 = 0;
-                        self.presentation.for_each_around(
+                        let unshown = self.presentation.count_around(
                             y, x, true,
                             | Cell { value: cell, y: _, x: _ } | {
-                                if let CellView::Hidden = cell { unshown += 1; }
+                                *cell == CellView::Hidden
                             }
                         );
                         if unshown == mines {
-                            self.presentation.for_each_around_mut(
-                                y, x, true,
-                                | CellMut { value: cell, y: _, x: _} | {
-                                    if let CellView::Hidden = *cell {
-                                        *cell = CellView::Flagged;
-                                        flagged += 1;
-                                    }
-                                }
-                            );
+                            flagged += self.presentation.replace_around(
+                                y, x, true, CellView::Hidden, CellView::Flagged
+                            ) as usize;
                         }
                     }
                 }
