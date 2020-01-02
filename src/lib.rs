@@ -120,16 +120,12 @@ impl<'a> Session<'a> {
         let mut flagged: usize = 0;
         for y in 0..self.presentation.row() {
             for x in 0..self.presentation.column() {
-                let cell = &self.presentation[(y, x)];
-                if let CellView::Shown = *cell {
+                if let CellView::Shown = self.presentation[(y, x)] {
                     if let FieldCell::NearMine(mines) = self.field.0[(y, x)] {
-                        let unshown = self.presentation.count_around(
-                            y, x, true,
-                            | Cell { value: cell, y: _, x: _ } | {
-                                *cell == CellView::Hidden
-                            }
+                        let potentially_mines = self.presentation.count_around_not(
+                            y, x, true, CellView::Shown // Hidden || Flagged
                         );
-                        if unshown == mines {
+                        if potentially_mines == mines {
                             flagged += self.presentation.replace_around(
                                 y, x, true, CellView::Hidden, CellView::Flagged
                             ) as usize;
@@ -139,6 +135,32 @@ impl<'a> Session<'a> {
             }
         }
         flagged
+    }
+
+    pub fn auto_open(&mut self) -> usize {
+        let mut opened: usize = 0;
+        for y in 0..self.presentation.row() {
+            for x in 0..self.presentation.column() {
+                if let CellView::Shown = self.presentation[(y, x)] {
+                    if let FieldCell::NearMine(mines) = self.field.0[(y, x)] {
+                        let flagged = self.presentation.count_around_of(
+                            y, x, true, CellView::Flagged
+                        );
+                        if flagged == mines {
+                            for &coords in self.presentation.coordinates_around(y, x, true).iter() {
+                                if let Some(coords) = coords {
+                                    if self.presentation[coords] == CellView::Hidden {
+                                        self.reveal_at(coords.0, coords.1);
+                                        opened += 1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        opened
     }
 }
 impl Debug for Session<'_> {

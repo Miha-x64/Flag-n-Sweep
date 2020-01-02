@@ -14,6 +14,13 @@ fn main() {
     let mut session = Session::from_field(&field, 3, 3);
     println!("{:?}", session);
 
-    session.auto_flag();
-    println!("{:?}", session);
+    loop {
+        let flagged = session.auto_flag();
+        println!("{:?}", session);
+        if flagged == 0 { break; }
+
+        let opened = session.auto_open();
+        println!("{:?}", session);
+        if opened == 0 { break; }
+    }
 }
